@@ -1,0 +1,8 @@
+services:
+  app:
+    container_name: ai-renamer
+    build: .
+    volumes:
+      - ./:/app/
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
