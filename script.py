@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 import os
 import sys
+import re
 from openai import OpenAI
 
 client = OpenAI()
@@ -22,21 +23,39 @@ def to_title_case(text):
     exceptions = ["a", "an", "and", "the", "but", "for",
                   "or", "nor", "on", "at", "to", "by", "with"]
     words = text.split()
-    title_case_words = [word.capitalize() if word.lower() not in exceptions else word.lower()
-                        for i, word in enumerate(words)]
+    title_case_words = []
+    capitalize_next = True
+
+    for word in words:
+        if capitalize_next or word.lower() not in exceptions:
+            title_case_words.append(word.capitalize())
+        else:
+            title_case_words.append(word.lower())
+
+        # Check if the word ends with a hyphen
+        if word.endswith('-'):
+            capitalize_next = True
+        else:
+            capitalize_next = False
+
     # Ensure the first word is always capitalized
     title_case_words[0] = title_case_words[0].capitalize()
     return " ".join(title_case_words)
 
 
 def get_new_filename(old_filename):
+    # Check if the filename contains a 4-digit year
+    year_match = re.search(r'\b\d{4}\b', old_filename)
+    year = year_match.group(0) if year_match else ""
+
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user",
-            "content": f"Rename the following concert file to the format <Artist> - <ConcertName> - <Year>: {old_filename}. Only return the filename (with extension) and nothing else."}
+            "content": f"Rename the following concert file to the format <Artist> - <ConcertName>{' - <Year>' if year else ''}: {old_filename}. Only return the filename (with extension) and nothing else. NEVER include \"The New Filename Should Be:\" in your response, only return the new filename.  If there's a Live on <something> in the original filename include that in the output filename.  Convert all non-english characters to english characters e.g. ö to o."},
     ]
-    response = client.chat.completions.create(model="gpt-3.5-turbo",
+    response = client.chat.completions.create(model="gpt-4",
                                               messages=messages,
+                                              temperature=0.4,
                                               max_tokens=60)
 
     try:
@@ -57,11 +76,24 @@ def get_new_filename(old_filename):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python script.py /path/to/directory")
+    if len(sys.argv) < 2:
+        print("Usage: python script.py [--noop] /path/to/directory")
         sys.exit(1)
 
-    folder_path = sys.argv[1]
+    noop = False
+    folder_path = ""
+
+    if "--noop" in sys.argv:
+        noop = True
+        if len(sys.argv) != 3:
+            print("Usage: python script.py [--noop] /path/to/directory")
+            sys.exit(1)
+        folder_path = sys.argv[2]
+    else:
+        if len(sys.argv) != 2:
+            print("Usage: python script.py [--noop] /path/to/directory")
+            sys.exit(1)
+        folder_path = sys.argv[1]
 
     if not os.path.isdir(folder_path):
         print(f"The path {folder_path} is not a valid directory.")
@@ -75,6 +107,20 @@ if __name__ == "__main__":
 
         if new_filename:
             new_filepath = os.path.join(folder_path, new_filename)
-            print(f'Renaming "{old_filename}" to "{new_filename}"')
-            # Uncomment the following line when ready to perform the actual renaming
-            # os.rename(old_filepath, new_filepath)
+            if noop:
+                print(f'Would rename "{old_filename}" to "{new_filename}"')
+            else:
+                print(f'Renaming "{old_filename}" to "{new_filename}"')
+                os.rename(old_filepath, new_filepath)
+        else:
+            # Handle filenames without a 4-digit year
+            base_name, extension = os.path.splitext(old_filename)
+            new_base_name = to_title_case(
+                base_name.replace('_', ' ').replace('-', ' '))
+            new_filename = f"{new_base_name}{extension}"
+            new_filepath = os.path.join(folder_path, new_filename)
+            if noop:
+                print(f'Would rename "{old_filename}" to "{new_filename}"')
+            else:
+                print(f'Renaming "{old_filename}" to "{new_filename}"')
+                os.rename(old_filepath, new_filepath)
