@@ -62,7 +62,7 @@ def get_new_filename(old_filename, output_format):
         new_filename = response.choices[0].message.content.strip()
 
         # Check for error message and skip if found
-        if "Without the Original Filename" in new_filename:
+        if "Without the Original Filename" in new_filename or "As an Ai" in new_filename:
             return None
 
         # Post-process to ensure proper title capitalization
@@ -73,6 +73,9 @@ def get_new_filename(old_filename, output_format):
         else:
             new_filename = to_title_case(new_filename)
 
+        # Remove any trailing dashes or spaces
+        new_filename = re.sub(r' -$', '', new_filename).strip()
+
         return new_filename
     except Exception as e:
         print(f"Failed to get a new name for {old_filename}: {e}")
@@ -81,7 +84,7 @@ def get_new_filename(old_filename, output_format):
 
 if __name__ == "__main__":
     noop = "--noop" in sys.argv
-    output_format = "<Artist> - <ConcertName>"
+    output_format = "<Standardized US English Name>"
     folder_path = None
 
     for arg in sys.argv[1:]:
